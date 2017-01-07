@@ -455,15 +455,15 @@ registerHelper allowUsername dest = do
     checkCsrfHeaderOrParam defaultCsrfHeaderName defaultCsrfParamName
     acceptHeader <- lift $ lookupHeader "Accept"
     identifier <- case acceptHeader of 
-                    Nothing -> error "fak"
+                    Nothing -> lookupPostParam "email"
                     Just header -> do
                       if (header == "application/json")
-                      then lookupPostParam "email"
-                      else do
+                      then do
                         (jidentifier :: Result Value) <- lift parseJsonBody
                         case jidentifier of
                           Error _ -> return Nothing
                           Success val -> return $ parseMaybe parseEmail val
+                      else lookupPostParam "email"
     let eidentifier = case identifier of
                           Nothing -> Left Msg.NoIdentifierProvided
                           Just x
