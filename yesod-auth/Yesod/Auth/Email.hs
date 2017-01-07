@@ -5,6 +5,7 @@
 {-# LANGUAGE QuasiQuotes             #-}
 {-# LANGUAGE Rank2Types              #-}
 {-# LANGUAGE ScopedTypeVariables#-}
+{-# LANGUAGE DoAndIfThenElse#-}
 {-# LANGUAGE TypeFamilies            #-}
 -- | A Yesod plugin for Authentication via e-mail
 --
@@ -452,16 +453,18 @@ registerHelper :: YesodAuthEmail master
 registerHelper allowUsername dest = do
     y <- lift getYesod
     checkCsrfHeaderOrParam defaultCsrfHeaderName defaultCsrfParamName
-    pidentifier <- lookupPostParam "email"
-    midentifier <- case pidentifier of
-                     Nothing -> do
-                       (jidentifier :: Result Value) <- lift parseJsonBody                                     
-                       case jidentifier of
-                         Error _ -> return Nothing
-                         Success val -> return $ parseMaybe parseEmail val
-                     Just _ -> return pidentifier
-                                  
-    let eidentifier = case midentifier of
+    acceptHeader <- lift $ lookupHeader "Accept"
+    identifier <- case acceptHeader of 
+                    Nothing -> error "fak"
+                    Just header -> do
+                      if (header == "application/json")
+                      then lookupPostParam "email"
+                      else do
+                        (jidentifier :: Result Value) <- lift parseJsonBody
+                        case jidentifier of
+                          Error _ -> return Nothing
+                          Success val -> return $ parseMaybe parseEmail val
+    let eidentifier = case identifier of
                           Nothing -> Left Msg.NoIdentifierProvided
                           Just x
                               | Just x' <- Text.Email.Validate.canonicalizeEmail (encodeUtf8 x) ->
