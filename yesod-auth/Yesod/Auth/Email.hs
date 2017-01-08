@@ -459,11 +459,13 @@ registerHelper allowUsername dest = do
                     Just header -> do
                       if (header == "application/json")
                       then do
+                        liftIO $ print "parseJSON"
                         (jidentifier :: Result Value) <- lift parseJsonBody
                         case jidentifier of
                           Error _ -> return Nothing
                           Success val -> return $ parseMaybe parseEmail val
                       else lookupPostParam "email"
+    liftIO $ print identifier
     let eidentifier = case identifier of
                           Nothing -> Left Msg.NoIdentifierProvided
                           Just x
