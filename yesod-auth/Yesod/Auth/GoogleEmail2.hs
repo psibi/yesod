@@ -95,6 +95,7 @@ import           Network.HTTP.Client.Conduit (Request, bodyReaderSource)
 import           Network.HTTP.Conduit (http)
 import           Network.HTTP.Types       (renderQueryText)
 import           System.IO.Unsafe         (unsafePerformIO)
+import Data.Monoid ((<>))
 
 
 -- | Plugin identifier. This is used to identify the plugin used for
@@ -104,32 +105,34 @@ import           System.IO.Unsafe         (unsafePerformIO)
 pid :: Text
 pid = "googleemail2"
 
-forwardUrl :: AuthRoute
-forwardUrl = PluginR pid ["forward"]
+type ClientId = Text
 
-csrfKey :: Text
-csrfKey = "_GOOGLE_CSRF_TOKEN"
+forwardUrl :: ClientId -> AuthRoute
+forwardUrl cid = PluginR pid ["forward", cid]
 
-getCsrfToken :: MonadHandler m => m (Maybe Text)
-getCsrfToken = lookupSession csrfKey
+csrfKey :: ClientId -> Text
+csrfKey cid = "_GOOGLE_CSRF_TOKEN_" <> cid
 
-accessTokenKey :: Text
-accessTokenKey = "_GOOGLE_ACCESS_TOKEN"
+getCsrfToken :: MonadHandler m => ClientId -> m (Maybe Text)
+getCsrfToken cid = lookupSession $ csrfKey cid
+
+accessTokenKey :: ClientId -> Text
+accessTokenKey cid = "_GOOGLE_ACCESS_TOKEN_" <> cid
 
 -- | Get user's access token from the session. Returns Nothing if it's not found
 --   (probably because the user is not logged in via 'Yesod.Auth.GoogleEmail2'
 --   or you are not using 'authGoogleEmailSaveToken')
-getUserAccessToken :: MonadHandler m => m (Maybe Token)
-getUserAccessToken = fmap (\t -> Token t "Bearer") <$> lookupSession accessTokenKey
+getUserAccessToken :: MonadHandler m => ClientId -> m (Maybe Token)
+getUserAccessToken cid = fmap (\t -> Token t "Bearer") <$> lookupSession (accessTokenKey cid)
 
-getCreateCsrfToken :: MonadHandler m => m Text
-getCreateCsrfToken = do
-    mtoken <- getCsrfToken
+getCreateCsrfToken :: MonadHandler m => ClientId -> m Text
+getCreateCsrfToken cid = do
+    mtoken <- getCsrfToken cid
     case mtoken of
         Just token -> return token
         Nothing -> do
             token <- Nonce.nonce128urlT defaultNonceGen
-            setSession csrfKey token
+            setSession (csrfKey cid) token
             return token
 
 authGoogleEmail :: YesodAuth m
@@ -154,7 +157,7 @@ authPlugin :: YesodAuth m
            -> Text -- ^ client secret
            -> AuthPlugin m
 authPlugin storeToken clientID clientSecret =
-    AuthPlugin pid dispatch login
+    AuthPlugin pid dispatch (login clientID)
   where
     complete = PluginR pid ["complete"]
 
@@ -162,7 +165,7 @@ authPlugin storeToken clientID clientSecret =
             => (Route Auth -> Route (HandlerSite m))
             -> m Text
     getDest tm = do
-        csrf <- getCreateCsrfToken
+        csrf <- getCreateCsrfToken clientID
         render <- getUrlRender
         let qs = map (second Just)
                 [ ("scope", "email profile")
@@ -177,8 +180,8 @@ authPlugin storeToken clientID clientSecret =
                $ fromByteString "https://accounts.google.com/o/oauth2/auth"
                     `Data.Monoid.mappend` renderQueryText True qs
 
-    login tm = do
-        [whamlet|<a href=@{tm forwardUrl}>_{Msg.LoginGoogle}|]
+    login cid tm = do
+        [whamlet|<a href=@{tm (forwardUrl cid)}>_{Msg.LoginGoogle}|]
 
     dispatch :: YesodAuth site
              => Text
@@ -193,7 +196,7 @@ authPlugin storeToken clientID clientSecret =
         case mstate of
             Nothing -> invalidArgs ["CSRF state from Google is missing"]
             Just state -> do
-                mtoken <- getCsrfToken
+                mtoken <- getCsrfToken clientID
                 unless (Just state == mtoken) $ invalidArgs ["Invalid CSRF token from Google"]
         mcode <- lookupGetParam "code"
         code <-
@@ -241,7 +244,7 @@ authPlugin storeToken clientID clientSecret =
         unless (tokenType' == "Bearer") $ error $ "Unknown token type: " ++ show tokenType'
 
         -- User's access token is saved for further access to API
-        when storeToken $ setSession accessTokenKey accessToken'
+        when storeToken $ setSession (accessTokenKey clientID) accessToken'
 
         personValue <- makeHttpRequest =<< personValueRequest token
         person <- case parseEither parseJSON personValue of
