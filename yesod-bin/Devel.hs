@@ -142,6 +142,8 @@ reverseProxy opts appPortVar = do
     let proxyApp = waiProxyToSettings
                 (const $ do
                     appPort <- atomically $ readTVar appPortVar
+                    print "port"
+                    print appPort
                     return $
                         ReverseProxy.WPRProxyDest
                         $ ProxyDest "127.0.0.1" appPort)
@@ -258,7 +260,6 @@ devel opts passThroughArgs = do
     -- The port that we're currently listening on, and that the
     -- reverse proxy should point to
     appPortVar <- newTVarIO (-1)
-
     -- If we're actually using reverse proxying, spawn off a reverse
     -- proxy thread
     let withRevProxy :: IO () -> IO ()
