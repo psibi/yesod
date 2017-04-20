@@ -387,7 +387,7 @@ devel opts passThroughArgs = do
                     -- no reverse proxy, so use the develPort directly
                     else return (develPort opts)
             print $ "stuck here 1 " ++ (show newPort)
-            atomically $ swapMVar appPortVar newPort
+            swapMVar appPortVar newPort
             print $ "stuck here 2"
 
             -- Modified environment
