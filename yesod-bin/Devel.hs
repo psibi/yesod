@@ -328,7 +328,7 @@ devel opts passThroughArgs = do
         withProcess_ procConfig $ \p -> do
             let helper getter h =
                       getter p
-                   $$ CL.iterM (\_ -> atomically $ writeTVar appPortVar (-1 :: Int))
+                   $$ CL.iterM (\_ -> do print "inside iteration"; atomically $ writeTVar appPortVar (-1 :: Int))
                    =$ CB.sinkHandle h
             race_ (helper getStdout stdout) (helper getStderr stderr)
 
