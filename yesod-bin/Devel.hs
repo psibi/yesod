@@ -385,7 +385,7 @@ devel opts passThroughArgs = do
                     then getNewPort opts
                     -- no reverse proxy, so use the develPort directly
                     else return (develPort opts)
-            print $ "stuck here 1"
+            print $ "stuck here 1 " <> (show newPort)
             atomically $ writeTVar appPortVar newPort
             print $ "stuck here 2"
 
