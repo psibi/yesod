@@ -142,8 +142,8 @@ reverseProxy opts appPortVar = do
 
     let proxyApp = waiProxyToSettings
                 (const $ do
-                    appPort <- takeMVar appPortVar
                     print "port"
+                    appPort <- takeMVar appPortVar
                     print appPort
                     return $
                         ReverseProxy.WPRProxyDest
@@ -387,7 +387,7 @@ devel opts passThroughArgs = do
                     -- no reverse proxy, so use the develPort directly
                     else return (develPort opts)
             print $ "stuck here 1 " ++ (show newPort)
-            swapMVar appPortVar newPort
+            putMVar appPortVar newPort
             print $ "stuck here 2"
 
             -- Modified environment
