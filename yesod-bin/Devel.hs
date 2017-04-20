@@ -10,6 +10,7 @@ module Devel
 import           Control.Applicative                   ((<|>))
 import           Control.Concurrent                    (threadDelay)
 import           Control.Concurrent.Async              (race_)
+import Control.Concurrent.MVar
 import           Control.Concurrent.STM
 import qualified Control.Exception.Safe                as Ex
 import           Control.Monad                         (forever, unless, void,
