@@ -122,7 +122,7 @@ data DevelOpts = DevelOpts
 -- | Run a reverse proxy from the develPort and develTlsPort ports to
 -- the app running in appPortVar. If there is no response on the
 -- application port, give an appropriate message to the user.
-reverseProxy :: DevelOpts -> TVar Int -> IO ()
+reverseProxy :: DevelOpts -> MVar Int -> IO ()
 reverseProxy opts appPortVar = do
     manager <- newManager $ managerSetProxy noProxy tlsManagerSettings
     let refreshHtml = LB.fromChunks [$(embedFile "refreshing.html")]
@@ -141,7 +141,7 @@ reverseProxy opts appPortVar = do
 
     let proxyApp = waiProxyToSettings
                 (const $ do
-                    appPort <- atomically $ readTVar appPortVar
+                    appPort <- takeMVar appPortVar
                     print "port"
                     print appPort
                     return $
@@ -259,7 +259,7 @@ devel opts passThroughArgs = do
 
     -- The port that we're currently listening on, and that the
     -- reverse proxy should point to
-    appPortVar <- newTVarIO (-1)
+    appPortVar <- newMVar (-1)
     -- If we're actually using reverse proxying, spawn off a reverse
     -- proxy thread
     let withRevProxy :: IO () -> IO ()
@@ -285,8 +285,8 @@ devel opts passThroughArgs = do
     sayV = when (verbose opts) . sayString
 
     -- Leverage "stack build --file-watch" to do the build
-    runStackBuild :: TVar Int -> [Char] -> Set.Set [Char] -> IO ()
-    runStackBuild appPortVar packageName availableFlags = do
+    runStackBuild :: MVar Int -> [Char] -> Set.Set [Char] -> IO ()
+    runStackBuild _ packageName availableFlags = do
         -- We call into this app for the devel-signal command
         myPath <- getExecutablePath
         let procConfig = setStdout createSource
@@ -328,7 +328,7 @@ devel opts passThroughArgs = do
         withProcess_ procConfig $ \p -> do
             let helper getter h =
                       getter p
-                   $$ CL.iterM (\_ -> do print "inside iteration"; atomically $ writeTVar appPortVar (-1 :: Int))
+                   $$ CL.iterM (\_ -> do print "inside iteration")
                    =$ CB.sinkHandle h
             race_ (helper getStdout stdout) (helper getStderr stderr)
 
@@ -357,7 +357,7 @@ devel opts passThroughArgs = do
         inner changedVar
 
     -- Each time the library builds successfully, run the application
-    runApp :: TVar Int -> TVar Bool -> String -> IO b
+    runApp :: MVar Int -> TVar Bool -> String -> IO b
     runApp appPortVar changedVar develHsPath = do
         -- Wait for the first change, indicating that the library
         -- has been built
@@ -386,7 +386,7 @@ devel opts passThroughArgs = do
                     -- no reverse proxy, so use the develPort directly
                     else return (develPort opts)
             print $ "stuck here 1 " ++ (show newPort)
-            atomically $ writeTVar appPortVar newPort
+            atomically $ swapMVar appPortVar newPort
             print $ "stuck here 2"
 
             -- Modified environment
