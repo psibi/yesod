@@ -261,7 +261,8 @@ devel opts passThroughArgs = do
 
     -- If we're actually using reverse proxying, spawn off a reverse
     -- proxy thread
-    let withRevProxy =
+    let withRevProxy :: IO () -> IO ()
+        withRevProxy =
           if useReverseProxy opts
             then race_ (reverseProxy opts appPortVar)
             else id
@@ -283,6 +284,7 @@ devel opts passThroughArgs = do
     sayV = when (verbose opts) . sayString
 
     -- Leverage "stack build --file-watch" to do the build
+    runStackBuild :: TVar Int -> [Char] -> Set.Set [Char] -> IO ()
     runStackBuild appPortVar packageName availableFlags = do
         -- We call into this app for the devel-signal command
         myPath <- getExecutablePath
@@ -325,12 +327,13 @@ devel opts passThroughArgs = do
         withProcess_ procConfig $ \p -> do
             let helper getter h =
                       getter p
-                   $$ CL.iterM (\_ -> atomically $ writeTVar appPortVar (-1))
+                   $$ CL.iterM (\_ -> atomically $ writeTVar appPortVar (-1 :: Int))
                    =$ CB.sinkHandle h
             race_ (helper getStdout stdout) (helper getStderr stderr)
 
     -- Run the inner action with a TVar which will be set to True
     -- whenever the signal file is modified.
+    withChangedVar :: (TVar Bool -> IO ()) -> IO ()
     withChangedVar inner = withManager $ \manager -> do
         -- Variable indicating that the signal file has been changed. We
         -- reset it each time we handle the signal.
@@ -353,6 +356,7 @@ devel opts passThroughArgs = do
         inner changedVar
 
     -- Each time the library builds successfully, run the application
+    runApp :: TVar Int -> TVar Bool -> String -> IO b
     runApp appPortVar changedVar develHsPath = do
         -- Wait for the first change, indicating that the library
         -- has been built
@@ -380,7 +384,9 @@ devel opts passThroughArgs = do
                     then getNewPort opts
                     -- no reverse proxy, so use the develPort directly
                     else return (develPort opts)
+            print $ "stuck here 1"
             atomically $ writeTVar appPortVar newPort
+            print $ "stuck here 2"
 
             -- Modified environment
             let env' = Map.toList
